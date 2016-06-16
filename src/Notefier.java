@@ -5,6 +5,7 @@ import java.awt.event.ActionListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -23,6 +24,7 @@ import javax.swing.UIManager;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
+import be.tarsos.dsp.io.TarsosDSPAudioFormat;
 import be.tarsos.dsp.io.jvm.JVMAudioInputStream;
 import be.tarsos.dsp.pitch.PitchDetectionHandler;
 import be.tarsos.dsp.pitch.PitchDetectionResult;
@@ -46,28 +48,43 @@ import javax.swing.JTextArea;
 import java.awt.Color;
 
 import javax.sound.sampled.AudioSystem;
-import javax.swing.JScrollBar;
+import javax.swing.JLabel;
 
-public class Notefier implements PitchDetectionHandler {
-	
+public class Notefier implements PitchDetectionHandler{
+
 	public static final float A_CONST = (float) Math.pow(2, 1 / 12.0);
-    public static final int MIDDLE_A_FREQ = 440;
-    public static final int NUM_HALF_STEPS = 12;
-    public static final String[] NOTE_TABLE = {"A", "A♯ / B♭", "B", "C", "C♯ / D♭",
-            "D", "D♯ / E♭", "E", "F", "F♯ / G♭", "G", "G♯ / A♭"};
+	public static final int MIDDLE_A_FREQ = 440;
+	public static final int NUM_HALF_STEPS = 12;
+	public static final String[] NOTE_TABLE = {"A", "A♯ / B♭", "B", "C", "C♯ / D♭",
+			"D", "D♯ / E♭", "E", "F", "F♯ / G♭", "G", "G♯ / A♭"};
 	public static final String MIXER_INFO_ID = "Default Audio Device, version Unknown Version";
+	public static final float MIN_PROBABILITY = (float) 0.92;
+
+	public static final int MIN_DB_VALUE = -70;
+	public static final int MIN_DB_CHANGE = 5;
 
 	private JFrame frame;
-	private JTextArea textArea;
 	private JTextArea noteArea;
+	private JTextArea textArea;
+	private JTextArea transcribeArea;
 	private AudioDispatcher dispatcher;
 	private Mixer mixer;
-	
-	private PitchEstimationAlgorithm algo;
-	private String prevNote = "";
-	private float prevNoteStart = 0;
-	
 
+	private PitchEstimationAlgorithm algo;
+
+	private String prevNote = "REST";
+	private float prevNoteStart = 0;
+	private String noiseCheck = "REST";
+	private float prevDB = -100;
+	private JTextField tempoField;
+
+	private ArrayList<String> allNotes = new ArrayList<String>();
+	private ArrayList<Float> allNoteLengths = new ArrayList<Float>();
+	private JTextField textField;
+	private JTextField textField_1;
+	
+	private int count = 0;
+	
 	/**
 	 * Launch the application.
 	 */
@@ -87,10 +104,46 @@ public class Notefier implements PitchDetectionHandler {
 	/**
 	 * Create the application.
 	 */
-	public Notefier() {
+	public Notefier() {	
 		//create the GUI
 		initialize();
 	}
+
+	private boolean isInteger(String input) {
+	    try {
+	        Integer.parseInt(input);
+	        return true;
+	    }
+	    catch(NumberFormatException e ) {
+	        return false;
+	    }
+	}
+
+	private void transcribe() {
+		// TODO Auto-generated method stub
+		String tempo = tempoField.getText();
+		if (isInteger(tempo)) {
+			int tempoVal = Integer.parseInt(tempo);
+			
+			// for now, assuming 4/4 time, so there are 4 beats in a bar
+			float lengthOfBar = (float) (60 / (tempoVal / 4.0)); // length in seconds of one bar
+			
+			// create an array of note length values (whole, half, quarter, eighth, sixteenth)
+			float[] noteLengthArray = new float[5];
+			for (int i = 0; i < noteLengthArray.length; i++) {
+				int divisor = 1 << i;
+				noteLengthArray[i] = (float) (lengthOfBar / divisor);
+			}
+			
+			for (int i = 0; i < allNotes.size(); i++) {
+				String curNote = allNotes.get(i);
+				float curNoteLength = allNoteLengths.get(i);
+				float noteRatio = curNoteLength / lengthOfBar;
+				System.out.println(curNote + ": " + noteRatio);
+			}
+		}
+	}
+	
 	
 	private void setMixer() throws LineUnavailableException {
 		algo = PitchEstimationAlgorithm.YIN;
@@ -103,14 +156,12 @@ public class Notefier implements PitchDetectionHandler {
 		if(dispatcher!= null){
 			dispatcher.stop();
 		}
-		
-		//float sampleRate = 1;
+
 		float sampleRate = 44100;
 		int bufferSize = 1024;
 		int overlap = 0;
-		
+
 		textArea.append("Started listening with " + mixer.toString() + "\n");
-		textArea.append("hello");
 
 		final AudioFormat format = new AudioFormat(sampleRate, 16, 1, true,
 				true);
@@ -130,87 +181,104 @@ public class Notefier implements PitchDetectionHandler {
 
 		// add a processor
 		dispatcher.addAudioProcessor(new PitchProcessor(algo, sampleRate, bufferSize, this));
-		
+
 		new Thread(dispatcher,"Audio dispatching").start();
 	}
-	
-	 public String getNote(float pitch) {
-	    float halfStepsFromA = (float) (Math.log(pitch / MIDDLE_A_FREQ) / Math.log(A_CONST)); // actual number of half steps from mid A
-      
-	    int stepBelow = (int) Math.floor(halfStepsFromA); // checks the step above and below
-	    int stepAbove = (int) Math.ceil(halfStepsFromA);
-	    
-	    float deltaBelow = (float) Math.abs(halfStepsFromA - stepBelow); // distance from steps
-	    float deltaAbove = (float) Math.abs(stepAbove - halfStepsFromA);
-	        
-	    int numSteps = deltaBelow > deltaAbove ? stepAbove : stepBelow; // sets numSteps to closer calculated step	        
-	    int octave = (numSteps / NUM_HALF_STEPS) + 4; // get the value for octave
-	        
-	    numSteps = numSteps % NUM_HALF_STEPS; // gets index in NOTE_TABLE and returns appropriate string
-	    if (numSteps < 0) numSteps = NUM_HALF_STEPS + numSteps;
-	        
-	    return NOTE_TABLE[numSteps] + octave;
+
+	public String getNote(float pitch) {
+		float halfStepsFromA = (float) (Math.log(pitch / MIDDLE_A_FREQ) / Math.log(A_CONST)); // actual number of half steps from mid A
+
+		int stepBelow = (int) Math.floor(halfStepsFromA); // checks the step above and below
+		int stepAbove = (int) Math.ceil(halfStepsFromA);
+
+		float deltaBelow = (float) Math.abs(halfStepsFromA - stepBelow); // distance from steps
+		float deltaAbove = (float) Math.abs(stepAbove - halfStepsFromA);
+
+		int numSteps = deltaBelow > deltaAbove ? stepAbove : stepBelow; // sets numSteps to closer calculated step
+
+		int numStepsC4 = numSteps + 9; // number of half steps of note from C4
+		int octave = Math.floorDiv(numStepsC4, NUM_HALF_STEPS) + 4; // get the value for octave
+
+		numSteps = numSteps % NUM_HALF_STEPS; // gets index in NOTE_TABLE and returns appropriate string
+		if (numSteps < 0) numSteps = NUM_HALF_STEPS + numSteps;
+
+		return NOTE_TABLE[numSteps] + octave;
 	}
 
-	 public void handlePitch(PitchDetectionResult pitchDetectionResult,AudioEvent audioEvent) {
-	        if(pitchDetectionResult.getPitch() != -1){
-	            double timeStamp = audioEvent.getTimeStamp();
-	            float pitch = pitchDetectionResult.getPitch();
-	            float probability = pitchDetectionResult.getProbability();
-	            double rms = audioEvent.getRMS() * 100;
-	            String note = getNote(pitch);
-	            
-	            if (!note.equals(prevNote)) { // changed notes
-	                float noteLength = (float) (timeStamp - prevNoteStart); 
-	                String newNoteMessage = String.format("Pitch detected: %s, Length: %f\n", prevNote, noteLength);
-	                noteArea.append(newNoteMessage);
-	                noteArea.setCaretPosition(noteArea.getDocument().getLength());
-	                
-	                prevNote = note;
-	                prevNoteStart = (float) timeStamp;
-	            }
-	            if (probability > 0.92) {
-	            	String message = String.format("Pitch detected at %.2fs: %.2fHz ( %.2f probability, RMS: %.5f ) The note is: %s\n", timeStamp,pitch,probability,rms, note);
-		            textArea.append(message);
-		            textArea.setCaretPosition(textArea.getDocument().getLength());
-	            }
-	           
-	        } else {
-	            if (!prevNote.equals("")) { // changed notes
-	                double timeStamp = audioEvent.getTimeStamp();
-	                float noteLength = (float) (timeStamp - prevNoteStart); 
-	                String newNoteMessage = String.format("Pitch detected: %s, Length: %f\n", prevNote, noteLength);
-	                noteArea.append(newNoteMessage);
-	                
-	                prevNote = ""; // indicates rest
-	                prevNoteStart = (float) timeStamp;
-	            }
-	        }
-	    }
-/*
 	@Override
 	public void handlePitch(PitchDetectionResult pitchDetectionResult,AudioEvent audioEvent) {
-		if(pitchDetectionResult.getPitch() != -1){
+		float dbValue = (float) audioEvent.getdBSPL();
+		float pitch = pitchDetectionResult.getPitch();
+		float probability = pitchDetectionResult.getProbability();
+	
+		if (pitch != -1 && probability >= .82) {
+			//float probability = pitchDetectionResult.getProbability();
+			//if (probability < MIN_PROBABILITY) return;
+
 			double timeStamp = audioEvent.getTimeStamp();
-			float pitch = pitchDetectionResult.getPitch();
-			float probability = pitchDetectionResult.getProbability();
-			double rms = audioEvent.getRMS() * 100;
-			String message = String.format("Pitch detected at %.2fs: %.2fHz ( %.2f probability, RMS: %.5f ) The note is: %s\n", timeStamp,pitch,probability,rms, getNote(pitch));
+			String note = getNote(pitch);
+			float RMS = (float) audioEvent.getRMS() * 100;
+			
+			String message = String.format("Pitch detected at %.2fs: %.2fHz ( %.2f probability, %.2f dB, %.2f RMS) The note is: %s\n", timeStamp,pitch,probability, dbValue, RMS, note);
 			textArea.append(message);
 			textArea.setCaretPosition(textArea.getDocument().getLength());
-		}
-	}
+
+			double change = dbValue - prevDB;
+			prevDB = dbValue; // resets prevDB
+
+			if (change >= MIN_DB_CHANGE) { // changed notes !note.equals(prevNote) || !note.equals(prevNote) || 
+/*
+				if (!noiseCheck.equals(note)) {
+					noiseCheck = note;
+					return;
+				}
 */
+				float noteLength = (float) (timeStamp - prevNoteStart); 
+				String newNoteMessage = String.format("Pitch detected: %s, Length: %f\n", note, noteLength);
+				noteArea.append(newNoteMessage);
+				
+				allNotes.add(prevNote);
+				allNoteLengths.add(noteLength);
+
+				prevNote = note;
+				prevNoteStart = (float) timeStamp;
+			}
+		} 
+		/*
+		else {
+			String message = String.format("REST detected at %.2f dB\n", dbValue);
+			textArea.append(message);
+			textArea.setCaretPosition(textArea.getDocument().getLength());
+			prevDB = dbValue; // resets prevDB
+			if (!prevNote.equals("REST")) {
+				if (!noiseCheck.equals("REST")) {
+					noiseCheck = "REST";
+					return;
+				}
+				double timeStamp = audioEvent.getTimeStamp();
+				float noteLength = (float) (timeStamp - prevNoteStart); 
+				String newNoteMessage = String.format("Pitch detected: %s, Length: %f\n", prevNote, noteLength);
+				noteArea.append(newNoteMessage);
+				allNotes.add(prevNote);
+				allNoteLengths.add(noteLength);
+				
+				prevNote = "REST"; // indicates rest
+				prevNoteStart = (float) timeStamp;
+			}
+		}
+		*/
+	}
+
 	/**
 	 * Initialize the contents of the frame.
 	 */
 	private void initialize() {
 		frame = new JFrame();
-		frame.getContentPane().setBackground(new Color(0, 100, 0));
-		frame.setBounds(100, 100, 822, 729);
+		frame.getContentPane().setBackground(new Color(0, 0, 0));
+		frame.setBounds(100, 100, 791, 700);
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.getContentPane().setLayout(null);
-		
+
 		JButton btnStartNoteifying = new JButton("Start");
 		btnStartNoteifying.setBackground(new Color(255, 255, 255));
 		btnStartNoteifying.addActionListener(new ActionListener() {
@@ -224,33 +292,84 @@ public class Notefier implements PitchDetectionHandler {
 		});
 		btnStartNoteifying.setBounds(35, 20, 117, 29);
 		frame.getContentPane().add(btnStartNoteifying);
-		
+
 		JScrollPane scrollPane = new JScrollPane();
-		scrollPane.setBounds(79, 371, 684, 311);
+		scrollPane.setBounds(35, 451, 708, 184);
 		frame.getContentPane().add(scrollPane);
 		
 		textArea = new JTextArea();
-		scrollPane.setRowHeaderView(textArea);
-		textArea.setEditable(false);
-		textArea.setBackground(new Color(255, 255, 255));
-		
+		scrollPane.setViewportView(textArea);
+		textArea.setBackground(new Color(0, 0, 0));
+		textArea.setForeground(new Color(50, 205, 50));
+
 		JButton btnStop = new JButton("Stop");
 		btnStop.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				if (dispatcher != null) {
 					dispatcher.stop();
 				}
+				System.out.println(Integer.toString(count));
 			}
 		});
-		btnStop.setBounds(35, 55, 117, 29);
+		btnStop.setBounds(35, 48, 117, 29);
 		frame.getContentPane().add(btnStop);
-		
+
 		JScrollPane scrollPane_1 = new JScrollPane();
-		scrollPane_1.setBounds(79, 116, 684, 195);
+		scrollPane_1.setBounds(35, 278, 708, 151);
 		frame.getContentPane().add(scrollPane_1);
-		
+
 		noteArea = new JTextArea();
+		noteArea.setForeground(new Color(255, 255, 0));
+		noteArea.setBackground(new Color(0, 0, 0));
 		scrollPane_1.setViewportView(noteArea);
 		noteArea.setEditable(false);
+		
+		JButton button = new JButton("Transcribe");
+		button.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				transcribe();
+			}
+		});
+		button.setBackground(Color.WHITE);
+		button.setBounds(506, 48, 117, 29);
+		frame.getContentPane().add(button);
+		
+		JScrollPane scrollPane_2 = new JScrollPane();
+		scrollPane_2.setBounds(35, 89, 586, 177);
+		frame.getContentPane().add(scrollPane_2);
+		
+		transcribeArea = new JTextArea();
+		scrollPane_2.setColumnHeaderView(transcribeArea);
+		transcribeArea.setEditable(false);
+		
+		tempoField = new JTextField();
+		tempoField.setBounds(442, 0, 62, 28);
+		frame.getContentPane().add(tempoField);
+		tempoField.setColumns(10);
+		
+		JLabel lblTempo = new JLabel("Tempo:");
+		lblTempo.setForeground(new Color(255, 255, 255));
+		lblTempo.setBounds(385, 6, 61, 16);
+		frame.getContentPane().add(lblTempo);
+		
+		JLabel label = new JLabel("Tempo:");
+		label.setForeground(new Color(255, 255, 255));
+		label.setBounds(385, 64, 61, 16);
+		frame.getContentPane().add(label);
+		
+		textField = new JTextField();
+		textField.setColumns(10);
+		textField.setBounds(442, 58, 62, 28);
+		frame.getContentPane().add(textField);
+		
+		JLabel label_1 = new JLabel("Tempo:");
+		label_1.setForeground(new Color(255, 255, 255));
+		label_1.setBounds(385, 40, 61, 16);
+		frame.getContentPane().add(label_1);
+		
+		textField_1 = new JTextField();
+		textField_1.setColumns(10);
+		textField_1.setBounds(442, 34, 62, 28);
+		frame.getContentPane().add(textField_1);
 	}
 }
