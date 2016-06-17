@@ -49,6 +49,9 @@ import java.awt.Color;
 
 import javax.sound.sampled.AudioSystem;
 import javax.swing.JLabel;
+import javax.swing.ImageIcon;
+import javax.swing.JFormattedTextField;
+import java.awt.Font;
 
 public class Notefier implements PitchDetectionHandler{
 
@@ -66,7 +69,6 @@ public class Notefier implements PitchDetectionHandler{
 	private JFrame frame;
 	private JTextArea noteArea;
 	private JTextArea textArea;
-	private JTextArea transcribeArea;
 	private AudioDispatcher dispatcher;
 	private Mixer mixer;
 
@@ -211,7 +213,7 @@ public class Notefier implements PitchDetectionHandler{
 		float pitch = pitchDetectionResult.getPitch();
 		float probability = pitchDetectionResult.getProbability();
 	
-		if (pitch != -1 && probability >= .82) {
+		if (pitch != -1 && probability > .83) {
 			//float probability = pitchDetectionResult.getProbability();
 			//if (probability < MIN_PROBABILITY) return;
 
@@ -290,17 +292,17 @@ public class Notefier implements PitchDetectionHandler{
 				}
 			}
 		});
-		btnStartNoteifying.setBounds(35, 20, 117, 29);
+		btnStartNoteifying.setBounds(45, 59, 117, 29);
 		frame.getContentPane().add(btnStartNoteifying);
 
 		JScrollPane scrollPane = new JScrollPane();
-		scrollPane.setBounds(35, 451, 708, 184);
+		scrollPane.setBounds(35, 434, 708, 184);
 		frame.getContentPane().add(scrollPane);
 		
 		textArea = new JTextArea();
 		scrollPane.setViewportView(textArea);
 		textArea.setBackground(new Color(0, 0, 0));
-		textArea.setForeground(new Color(50, 205, 50));
+		textArea.setForeground(new Color(255, 140, 0));
 
 		JButton btnStop = new JButton("Stop");
 		btnStop.addActionListener(new ActionListener() {
@@ -311,18 +313,18 @@ public class Notefier implements PitchDetectionHandler{
 				System.out.println(Integer.toString(count));
 			}
 		});
-		btnStop.setBounds(35, 48, 117, 29);
+		btnStop.setBounds(45, 91, 117, 29);
 		frame.getContentPane().add(btnStop);
 
 		JScrollPane scrollPane_1 = new JScrollPane();
-		scrollPane_1.setBounds(35, 278, 708, 151);
+		scrollPane_1.setBounds(35, 212, 708, 151);
 		frame.getContentPane().add(scrollPane_1);
-
-		noteArea = new JTextArea();
-		noteArea.setForeground(new Color(255, 255, 0));
-		noteArea.setBackground(new Color(0, 0, 0));
-		scrollPane_1.setViewportView(noteArea);
-		noteArea.setEditable(false);
+		
+				noteArea = new JTextArea();
+				scrollPane_1.setViewportView(noteArea);
+				noteArea.setForeground(new Color(0, 139, 139));
+				noteArea.setBackground(new Color(0, 0, 0));
+				noteArea.setEditable(false);
 		
 		JButton button = new JButton("Transcribe");
 		button.addActionListener(new ActionListener() {
@@ -331,45 +333,49 @@ public class Notefier implements PitchDetectionHandler{
 			}
 		});
 		button.setBackground(Color.WHITE);
-		button.setBounds(506, 48, 117, 29);
+		button.setBounds(516, 78, 117, 29);
 		frame.getContentPane().add(button);
 		
-		JScrollPane scrollPane_2 = new JScrollPane();
-		scrollPane_2.setBounds(35, 89, 586, 177);
-		frame.getContentPane().add(scrollPane_2);
-		
-		transcribeArea = new JTextArea();
-		scrollPane_2.setColumnHeaderView(transcribeArea);
-		transcribeArea.setEditable(false);
-		
 		tempoField = new JTextField();
-		tempoField.setBounds(442, 0, 62, 28);
+		tempoField.setBounds(442, 12, 62, 28);
 		frame.getContentPane().add(tempoField);
 		tempoField.setColumns(10);
 		
 		JLabel lblTempo = new JLabel("Tempo:");
 		lblTempo.setForeground(new Color(255, 255, 255));
-		lblTempo.setBounds(385, 6, 61, 16);
+		lblTempo.setBounds(385, 18, 61, 16);
 		frame.getContentPane().add(lblTempo);
 		
 		JLabel label = new JLabel("Tempo:");
 		label.setForeground(new Color(255, 255, 255));
-		label.setBounds(385, 64, 61, 16);
+		label.setBounds(385, 83, 61, 16);
 		frame.getContentPane().add(label);
 		
 		textField = new JTextField();
 		textField.setColumns(10);
-		textField.setBounds(442, 58, 62, 28);
+		textField.setBounds(442, 77, 62, 28);
 		frame.getContentPane().add(textField);
 		
 		JLabel label_1 = new JLabel("Tempo:");
 		label_1.setForeground(new Color(255, 255, 255));
-		label_1.setBounds(385, 40, 61, 16);
+		label_1.setBounds(385, 55, 61, 16);
 		frame.getContentPane().add(label_1);
 		
 		textField_1 = new JTextField();
 		textField_1.setColumns(10);
-		textField_1.setBounds(442, 34, 62, 28);
+		textField_1.setBounds(442, 52, 62, 28);
 		frame.getContentPane().add(textField_1);
+		
+		JLabel lblNoteifier = new JLabel("NOTEIFIER");
+		lblNoteifier.setFont(new Font("Lucida Grande", Font.PLAIN, 20));
+		lblNoteifier.setForeground(new Color(255, 140, 0));
+		lblNoteifier.setBounds(55, 6, 117, 39);
+		frame.getContentPane().add(lblNoteifier);
+		
+		JLabel lblChetanRane = new JLabel("© Chetan Rane & Andrew Chang ");
+		lblChetanRane.setFont(new Font("Lucida Grande", Font.PLAIN, 11));
+		lblChetanRane.setForeground(new Color(255, 140, 0));
+		lblChetanRane.setBounds(601, 644, 184, 16);
+		frame.getContentPane().add(lblChetanRane);
 	}
 }
